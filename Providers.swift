@@ -1,6 +1,6 @@
 import Foundation
 
-struct OpenAIProvider: ChatProvider {
+struct OpenAIProvider: ChatProvider, Sendable {
     let kind: ProviderKind = .openAI
 
     func reply(messages: [ChatMessage], model: String) async throws -> String {
@@ -10,7 +10,7 @@ struct OpenAIProvider: ChatProvider {
     }
 }
 
-struct OpenRouterProvider: ChatProvider {
+struct OpenRouterProvider: ChatProvider, Sendable {
     let kind: ProviderKind = .openRouter
 
     func reply(messages: [ChatMessage], model: String) async throws -> String {
@@ -21,7 +21,7 @@ struct OpenRouterProvider: ChatProvider {
     }
 }
 
-struct OllamaProvider: ChatProvider {
+struct OllamaProvider: ChatProvider, Sendable {
     let kind: ProviderKind = .ollama
 
     func reply(messages: [ChatMessage], model: String) async throws -> String {
@@ -58,7 +58,7 @@ struct OllamaProvider: ChatProvider {
     }
 }
 
-struct ResponsesProvider {
+struct ResponsesProvider: Sendable {
     let apiKey: String
     let baseURL: URL
     let model: String

@@ -19,7 +19,7 @@ struct ProviderOption: Identifiable, Hashable {
     let kind: ProviderKind
 }
 
-enum ProviderKind: String, CaseIterable, Hashable {
+enum ProviderKind: String, CaseIterable, Hashable, Sendable {
     case openAI
     case openRouter
     case ollama
@@ -35,8 +35,8 @@ enum ProviderKind: String, CaseIterable, Hashable {
     }
 }
 
-struct ChatMessage: Identifiable, Hashable {
-    enum Role: Hashable {
+struct ChatMessage: Identifiable, Hashable, Sendable {
+    enum Role: Hashable, Sendable {
         case user
         case assistant
         case system
@@ -56,7 +56,7 @@ struct Conversation: Identifiable, Hashable {
     var messages: [ChatMessage]
 }
 
-protocol ChatProvider {
+protocol ChatProvider: Sendable {
     var kind: ProviderKind { get }
     func reply(messages: [ChatMessage], model: String) async throws -> String
 }
@@ -99,7 +99,7 @@ final class ChatStore: ObservableObject {
         .init(name: "Local demo", subtitle: "No key needed", kind: .localMock)
     ]
 
-    private let providerClients: [ProviderKind: ChatProvider] = [
+    private nonisolated(unsafe) let providerClients: [ProviderKind: ChatProvider] = [
         .openAI: OpenAIProvider(),
         .openRouter: OpenRouterProvider(),
         .ollama: OllamaProvider(),
@@ -162,16 +162,12 @@ final class ChatStore: ObservableObject {
         let provider = providerClients[currentProvider] ?? LocalMockProvider()
         let model = currentModel
 
-        Task {
+        Task { @MainActor in
             do {
                 let reply = try await provider.reply(messages: snapshot, model: model)
-                await MainActor.run {
-                    self.typeReply(reply, in: index)
-                }
+                self.typeReply(reply, in: index)
             } catch {
-                await MainActor.run {
-                    self.typeReply(self.mockReply(for: text), in: index)
-                }
+                self.typeReply(self.mockReply(for: text), in: index)
             }
         }
     }
@@ -186,16 +182,12 @@ final class ChatStore: ObservableObject {
         let model = currentModel
         let snapshot = conversations[index].messages
 
-        Task {
+        Task { @MainActor in
             do {
                 let reply = try await provider.reply(messages: snapshot, model: model)
-                await MainActor.run {
-                    self.typeReply(reply, in: index)
-                }
+                self.typeReply(reply, in: index)
             } catch {
-                await MainActor.run {
-                    self.typeReply(self.mockReply(for: snapshot.last?.text ?? ""), in: index)
-                }
+                self.typeReply(self.mockReply(for: snapshot.last?.text ?? ""), in: index)
             }
         }
     }
@@ -206,21 +198,17 @@ final class ChatStore: ObservableObject {
         let messageIndex = conversations[index].messages.count - 1
         conversations[index].preview = reply
 
-        Task {
+        Task { @MainActor in
             let chunks = split(reply, size: 3)
             for chunk in chunks {
                 try? await Task.sleep(nanoseconds: 40_000_000)
-                await MainActor.run {
-                    self.conversations[index].messages[messageIndex].text += chunk
-                    self.conversations[index].messages[messageIndex].isStreaming = true
-                    self.streamText = self.conversations[index].messages[messageIndex].text
-                }
+                self.conversations[index].messages[messageIndex].text += chunk
+                self.conversations[index].messages[messageIndex].isStreaming = true
+                self.streamText = self.conversations[index].messages[messageIndex].text
             }
-            await MainActor.run {
-                self.conversations[index].messages[messageIndex].isStreaming = false
-                self.isThinking = false
-                self.streamText = ""
-            }
+            self.conversations[index].messages[messageIndex].isStreaming = false
+            self.isThinking = false
+            self.streamText = ""
         }
     }
 
@@ -256,7 +244,7 @@ final class ChatStore: ObservableObject {
     }
 }
 
-struct LocalMockProvider: ChatProvider {
+struct LocalMockProvider: ChatProvider, Sendable {
     let kind: ProviderKind = .localMock
     func reply(messages: [ChatMessage], model: String) async throws -> String {
         let text = messages.last(where: { $0.role == .user })?.text ?? ""
