@@ -99,7 +99,7 @@ final class ChatStore: ObservableObject {
         .init(name: "Local demo", subtitle: "No key needed", kind: .localMock)
     ]
 
-    private nonisolated(unsafe) let providerClients: [ProviderKind: ChatProvider] = [
+    private let providerClients: [ProviderKind: ChatProvider] = [
         .openAI: OpenAIProvider(),
         .openRouter: OpenRouterProvider(),
         .ollama: OllamaProvider(),
