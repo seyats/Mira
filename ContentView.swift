@@ -329,7 +329,7 @@ struct ContentView: View {
         .modifier(LiquidGlass())
     }
 
-    private var modelPickerCard: some View {
+    private func modelPickerCard(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Select model")
                 .font(.system(size: 24, weight: .bold, design: .rounded))
@@ -397,7 +397,7 @@ struct ContentView: View {
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 26)
-        .frame(width: 560)
+        .frame(width: width)
         .background(
             RoundedRectangle(cornerRadius: 42, style: .continuous)
                 .fill(Color(red: 0.15, green: 0.15, blue: 0.32).opacity(0.95))
@@ -667,52 +667,56 @@ struct ContentView: View {
     }
 
     private func settingsRow(icon: String, title: String, badge: String? = nil, action: (() -> Void)? = nil) -> some View {
-        Button {
-            action?()
-        } label: {
+        VStack(spacing: 0) {
+            Button {
+                action?()
+            } label: {
+                HStack(spacing: 14) {
+                    Image(systemName: icon)
+                        .font(.system(size: 23, weight: .bold))
+                        .frame(width: 30)
+                    Text(title)
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                    if let badge {
+                        Text(badge)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(.green)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(Capsule().fill(Color.green.opacity(0.18)))
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.32))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 18)
+            }
+            .buttonStyle(.plain)
+            Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 56)
+        }
+    }
+
+    private func toggleRow(icon: String, title: String, isOn: Binding<Bool>) -> some View {
+        VStack(spacing: 0) {
             HStack(spacing: 14) {
                 Image(systemName: icon)
                     .font(.system(size: 23, weight: .bold))
                     .frame(width: 30)
                 Text(title)
                     .font(.system(size: 24, weight: .bold, design: .rounded))
-                if let badge {
-                    Text(badge)
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(.green)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(Color.green.opacity(0.18)))
-                }
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.32))
+                Toggle("", isOn: isOn)
+                    .labelsHidden()
+                    .tint(.green)
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 18)
             .padding(.vertical, 18)
+            Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 56)
         }
-        .buttonStyle(.plain)
-        Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 56)
-    }
-
-    private func toggleRow(icon: String, title: String, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 23, weight: .bold))
-                .frame(width: 30)
-            Text(title)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-            Spacer()
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(.green)
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 18)
-        Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 56)
     }
 
     private func dangerRow(icon: String, title: String) -> some View {
@@ -733,30 +737,32 @@ struct ContentView: View {
     }
 
     private func providerRow(kind: ProviderKind, title: String, subtitle: String) -> some View {
-        Button {
-            store.setProvider(kind)
-        } label: {
-            HStack(spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                    Text(subtitle)
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.42))
+        VStack(spacing: 0) {
+            Button {
+                store.setProvider(kind)
+            } label: {
+                HStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                        Text(subtitle)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.42))
+                    }
+                    Spacer()
+                    if store.currentProvider == kind {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(.green)
+                    }
                 }
-                Spacer()
-                if store.currentProvider == kind {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(.green)
-                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 18)
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 18)
+            .buttonStyle(.plain)
+            Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 56)
         }
-        .buttonStyle(.plain)
-        Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 56)
     }
 
     private func iconPill(systemName: String, action: @escaping () -> Void) -> some View {
@@ -807,10 +813,12 @@ struct ContentView: View {
 
 struct LiquidGlass: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.glassEffect()
-        } else {
-            content
-        }
+        content
+            .background(.ultraThinMaterial)
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.22), radius: 24, x: 0, y: 14)
     }
 }
