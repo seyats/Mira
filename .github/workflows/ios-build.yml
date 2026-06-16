@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: macos-14
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -16,7 +17,8 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Validate signing secrets
+      - name: Detect signing secrets
+        id: signing
         env:
           IOS_DISTRIBUTION_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
           IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
@@ -24,38 +26,64 @@ jobs:
           IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
         run: |
-          test -n "$IOS_DISTRIBUTION_P12_BASE64"
-          test -n "$IOS_DISTRIBUTION_P12_PASSWORD"
-          test -n "$IOS_PROVISIONING_PROFILE_BASE64"
-          test -n "$IOS_SIGNING_IDENTITY"
-          test -n "$IOS_TEAM_ID"
+          if [ -n "$IOS_DISTRIBUTION_P12_BASE64" ] && \
+             [ -n "$IOS_DISTRIBUTION_P12_PASSWORD" ] && \
+             [ -n "$IOS_PROVISIONING_PROFILE_BASE64" ] && \
+             [ -n "$IOS_SIGNING_IDENTITY" ] && \
+             [ -n "$IOS_TEAM_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Generate project
         run: xcodegen generate
 
+      - name: Build unsigned simulator app
+        if: steps.signing.outputs.enabled != 'true'
+        run: |
+          mkdir -p build/logs
+          set -o pipefail
+          xcodebuild \
+            -project Mira.xcodeproj \
+            -scheme Mira \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee build/logs/simulator-build.log
+
       - name: Import signing assets
+        if: steps.signing.outputs.enabled == 'true'
         env:
           IOS_DISTRIBUTION_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
           IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
           IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
-          IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
-          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
         run: |
           mkdir -p build/secrets
           echo "$IOS_DISTRIBUTION_P12_BASE64" | base64 --decode > build/secrets/dist.p12
           echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > build/secrets/profile.mobileprovision
+
           security create-keychain -p temp build/secrets/mira.keychain
           security default-keychain -s build/secrets/mira.keychain
           security unlock-keychain -p temp build/secrets/mira.keychain
-          security import build/secrets/dist.p12 -k build/secrets/mira.keychain -P "$IOS_DISTRIBUTION_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security import build/secrets/dist.p12 \
+            -k build/secrets/mira.keychain \
+            -P "$IOS_DISTRIBUTION_P12_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temp build/secrets/mira.keychain
+
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp build/secrets/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
 
       - name: Build archive
+        if: steps.signing.outputs.enabled == 'true'
         env:
           IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
         run: |
+          mkdir -p build/logs
+          set -o pipefail
           xcodebuild \
             -project Mira.xcodeproj \
             -scheme Mira \
@@ -64,9 +92,10 @@ jobs:
             DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
             CODE_SIGN_IDENTITY="$IOS_SIGNING_IDENTITY" \
             -archivePath build/Mira.xcarchive \
-            archive
+            archive 2>&1 | tee build/logs/archive-build.log
 
       - name: Export IPA
+        if: steps.signing.outputs.enabled == 'true'
         env:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
           IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
@@ -92,16 +121,30 @@ jobs:
           </dict>
           </plist>
           EOF
-          xcodebuild -exportArchive -archivePath build/Mira.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist
+          set -o pipefail
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/Mira.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist build/ExportOptions.plist 2>&1 | tee build/logs/export-ipa.log
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mira-build-logs
+          path: build/logs/*.log
+          if-no-files-found: ignore
 
       - name: Upload archive
+        if: steps.signing.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Mira-xcarchive
           path: build/Mira.xcarchive
 
       - name: Upload ipa
-        if: ${{ hashFiles('build/export/*.ipa') != '' }}
+        if: steps.signing.outputs.enabled == 'true' && hashFiles('build/export/*.ipa') != ''
         uses: actions/upload-artifact@v4
         with:
           name: Mira-ipa
