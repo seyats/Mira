@@ -19,6 +19,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.seyats.mira
         DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_ASSET_PATHS: Resources
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES

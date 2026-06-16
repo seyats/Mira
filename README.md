@@ -15,9 +15,5 @@ SwiftUI iOS app source that recreates the referenced dark glass UI and uses the 
 - The app is designed for iPhone.
 - Glass styling is applied through `glassEffect()` when available on iOS 18, with a visual fallback on older versions.
 - `project.yml` is intended for XcodeGen.
-- GitHub Actions expects these secrets for full `.ipa` export:
-  - `IOS_DISTRIBUTION_P12_BASE64`
-  - `IOS_DISTRIBUTION_P12_PASSWORD`
-  - `IOS_PROVISIONING_PROFILE_BASE64`
-  - `IOS_SIGNING_IDENTITY`
-  - `IOS_TEAM_ID`
+- For free signing, open the generated project in Xcode on a Mac, select your Apple ID team, keep `Automatic` signing, and run on a device.
+- For AltStore, build a signed app from Xcode with your Apple ID, then install that build using AltStore/AltServer.
