@@ -1,0 +1,78 @@
+name: iOS Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Build archive
+        run: |
+          xcodebuild \
+            -project Mira.xcodeproj \
+            -scheme Mira \
+            -configuration Release \
+            -archivePath build/Mira.xcarchive \
+            archive
+
+      - name: Export IPA
+        if: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 != '' && secrets.IOS_DISTRIBUTION_P12_PASSWORD != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' && secrets.IOS_SIGNING_IDENTITY != '' && secrets.IOS_TEAM_ID != '' }}
+        env:
+          IOS_DISTRIBUTION_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          mkdir -p build/secrets
+          echo "$IOS_DISTRIBUTION_P12_BASE64" | base64 --decode > build/secrets/dist.p12
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > build/secrets/profile.mobileprovision
+          security create-keychain -p temp build/secrets/mira.keychain
+          security default-keychain -s build/secrets/mira.keychain
+          security unlock-keychain -p temp build/secrets/mira.keychain
+          security import build/secrets/dist.p12 -k build/secrets/mira.keychain -P "$IOS_DISTRIBUTION_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp build/secrets/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+          cat > build/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>ad-hoc</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>teamID</key>
+            <string>$IOS_TEAM_ID</string>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive -archivePath build/Mira.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mira-xcarchive
+          path: build/Mira.xcarchive
+
+      - name: Upload ipa
+        if: ${{ hashFiles('build/export/*.ipa') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mira-ipa
+          path: build/export/*.ipa
